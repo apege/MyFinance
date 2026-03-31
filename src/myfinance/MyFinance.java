@@ -6,7 +6,10 @@ package myfinance;
 
 import java.awt.Color;
 import java.awt.FlowLayout;
-import javax.swing.JPanel;
+import javax.swing.JPanel; 
+
+
+
 /**
  *
  * @author Alif
@@ -23,6 +26,7 @@ public class MyFinance extends javax.swing.JFrame {
         initButtonStyle();
         fixLayout();
     }
+    
     
     private void fixLayout() {
     // Ambil gradientPanel dari jPanel1
@@ -125,6 +129,11 @@ public class MyFinance extends javax.swing.JFrame {
         jButton2.setForeground(new java.awt.Color(255, 255, 255));
         jButton2.setText("Transaksi");
         jButton2.setContentAreaFilled(false);
+        jButton2.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton2ActionPerformed(evt);
+            }
+        });
 
         jButton3.setFont(new java.awt.Font("JetBrainsMono NFP ExtraBold", 0, 18)); // NOI18N
         jButton3.setForeground(new java.awt.Color(255, 255, 255));
@@ -156,7 +165,7 @@ public class MyFinance extends javax.swing.JFrame {
                     .addGroup(gradientPanel1Layout.createSequentialGroup()
                         .addGap(20, 20, 20)
                         .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 165, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(0, 22, Short.MAX_VALUE)))
+                        .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
         );
         gradientPanel1Layout.setVerticalGroup(
@@ -330,7 +339,21 @@ public class MyFinance extends javax.swing.JFrame {
 
     private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
         // TODO add your handling code here:
+    jScrollPane1.setViewportView(jPanel1); 
+    jScrollPane1.revalidate();
+    jScrollPane1.repaint();
     }//GEN-LAST:event_jButton1ActionPerformed
+
+    private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
+        // TODO add your handling code here:
+    javax.swing.JViewport viewport = jScrollPane1.getViewport();
+    viewport.removeAll();
+    viewport.add(new TransaksiPanel());
+    viewport.revalidate();
+    viewport.repaint();
+    
+
+    }//GEN-LAST:event_jButton2ActionPerformed
 
     /**
      * @param args the command line arguments
