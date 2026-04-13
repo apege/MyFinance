@@ -139,6 +139,11 @@ public class MyFinance extends javax.swing.JFrame {
         jButton3.setForeground(new java.awt.Color(255, 255, 255));
         jButton3.setText("Anggaran");
         jButton3.setContentAreaFilled(false);
+        jButton3.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton3ActionPerformed(evt);
+            }
+        });
 
         jButton4.setFont(new java.awt.Font("JetBrainsMono NFP ExtraBold", 0, 18)); // NOI18N
         jButton4.setForeground(new java.awt.Color(255, 255, 255));
@@ -354,6 +359,17 @@ public class MyFinance extends javax.swing.JFrame {
     
 
     }//GEN-LAST:event_jButton2ActionPerformed
+
+    private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton3ActionPerformed
+    javax.swing.JViewport viewport = jScrollPane1.getViewport();
+    viewport.removeAll();
+    AnggaranPanel panel = new AnggaranPanel();
+    viewport.add(panel);
+    viewport.revalidate();
+    viewport.repaint();
+    jScrollPane1.revalidate();
+    jScrollPane1.repaint();
+    }//GEN-LAST:event_jButton3ActionPerformed
 
     /**
      * @param args the command line arguments
