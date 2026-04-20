@@ -5,10 +5,17 @@ import javax.swing.border.*;
 import javax.swing.table.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.sql.Date;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.List;
+import java.util.Locale;
 
 public class TransaksiPanel extends JPanel {
 
-    // === COLOR PALETTE (Light theme - matching Dashboard) ===
+    // === COLOR PALETTE ===
     private static final Color BG_MAIN       = new Color(230, 230, 235);
     private static final Color BG_WHITE      = new Color(255, 255, 255);
     private static final Color CARD_GREEN    = new Color(40, 190, 80);
@@ -20,40 +27,75 @@ public class TransaksiPanel extends JPanel {
     private static final Color TEXT_RED      = new Color(200, 40, 40);
     private static final Color BORDER_LIGHT  = new Color(205, 205, 215);
 
-    private static final Font FONT_TITLE    = new Font("Segoe UI", Font.BOLD, 24);
-    private static final Font FONT_SUBTITLE = new Font("Segoe UI", Font.PLAIN, 13);
-    private static final Font FONT_LABEL    = new Font("Segoe UI", Font.PLAIN, 12);
-    private static final Font FONT_AMOUNT   = new Font("Segoe UI", Font.BOLD, 22);
-    private static final Font FONT_AMOUNT_SM= new Font("Segoe UI", Font.BOLD, 13);
-    private static final Font FONT_BTN      = new Font("Segoe UI", Font.BOLD, 13);
-    private static final Font FONT_TABLE_H  = new Font("Segoe UI", Font.BOLD, 12);
-    private static final Font FONT_TABLE    = new Font("Segoe UI", Font.PLAIN, 13);
+    private static final Font FONT_TITLE     = new Font("Segoe UI", Font.BOLD, 24);
+    private static final Font FONT_SUBTITLE  = new Font("Segoe UI", Font.PLAIN, 13);
+    private static final Font FONT_LABEL     = new Font("Segoe UI", Font.PLAIN, 12);
+    private static final Font FONT_AMOUNT    = new Font("Segoe UI", Font.BOLD, 22);
+    private static final Font FONT_AMOUNT_SM = new Font("Segoe UI", Font.BOLD, 13);
+    private static final Font FONT_BTN       = new Font("Segoe UI", Font.BOLD, 13);
+    private static final Font FONT_TABLE_H   = new Font("Segoe UI", Font.BOLD, 12);
+    private static final Font FONT_TABLE     = new Font("Segoe UI", Font.PLAIN, 13);
 
+    // ── State ────────────────────────────────────────────────────────────────
     private DefaultTableModel tableModel;
-    private JTextField searchField;
+    private JTextField        searchField;
     private JComboBox<String> typeFilter;
     private JComboBox<String> categoryFilter;
+    private List<Transaksi>   allData = new ArrayList<>();
 
-    private Object[][] sampleData = {
-        {"13 Jan 2025", "Gaji Bulanan",              "Gaji",              "Transfer Bank", 10000000L, true},
-        {"12 Jan 2025", "Belanja Bulanan Indomaret",  "Belanja",           "Debit Card",      450000L, false},
-        {"11 Jan 2025", "Freelance Design",           "Gaji",              "Transfer Bank",  2000000L, true},
-        {"10 Jan 2025", "Tagihan Listrik",            "Tagihan",           "Transfer Bank",   350000L, false},
-        {"09 Jan 2025", "Makan Siang Kantor",         "Makanan & Minuman", "Cash",             75000L, false},
-        {"08 Jan 2025", "Transport Ojol",             "Transport",         "E-Wallet",         45000L, false},
-        {"07 Jan 2025", "Netflix Subscription",       "Hiburan",           "Debit Card",       54000L, false},
-        {"06 Jan 2025", "Bonus Proyek",               "Gaji",              "Transfer Bank",  2000000L, true},
-        {"05 Jan 2025", "Gym Membership",             "Kesehatan",         "Debit Card",      300000L, false},
-        {"04 Jan 2025", "Grab Food",                  "Makanan & Minuman", "E-Wallet",         85000L, false},
-    };
+    // Referensi label stat cards (supaya bisa di-update)
+    private JLabel lblPemasukan;
+    private JLabel lblPengeluaran;
+    private JLabel lblTotalTransaksi;
 
+    // ── Constructor ──────────────────────────────────────────────────────────
     public TransaksiPanel() {
         setLayout(new BorderLayout());
         setBackground(BG_MAIN);
         setBorder(new EmptyBorder(28, 32, 28, 32));
         buildUI();
+        loadFromDB();
     }
 
+    // ── Load dari DB ─────────────────────────────────────────────────────────
+    private void loadFromDB() {
+        allData = TransaksiDAO.getAll(1L);
+        refreshTable();
+        updateStats();
+    }
+
+    private void refreshTable() {
+        tableModel.setRowCount(0);
+        for (Transaksi t : allData) {
+            tableModel.addRow(new Object[]{
+                t.getTanggalDisplay(),
+                t.getDeskripsi(),
+                t.getKategori(),
+                "-",
+                formatAmount(t.getJumlah(), t.isPemasukan()),
+                "✕",
+                t.getId()   // hidden – kolom 6
+            });
+        }
+    }
+
+    private void updateStats() {
+        Calendar cal   = Calendar.getInstance();
+        int month      = cal.get(Calendar.MONTH) + 1;
+        int year       = cal.get(Calendar.YEAR);
+        long pemasukan   = TransaksiDAO.getTotalPemasukan(1L, month, year);
+        long pengeluaran = TransaksiDAO.getTotalPengeluaran(1L, month, year);
+        if (lblPemasukan     != null) lblPemasukan.setText(fmtStatAmt(pemasukan));
+        if (lblPengeluaran   != null) lblPengeluaran.setText(fmtStatAmt(pengeluaran));
+        if (lblTotalTransaksi != null) lblTotalTransaksi.setText(String.valueOf(allData.size()));
+    }
+
+    private String fmtStatAmt(long val) {
+        if (val >= 1_000_000) return String.format("Rp %.1fJt", val / 1_000_000.0);
+        return "Rp " + String.format("%,d", val).replace(",", ".");
+    }
+
+    // ── UI Builder ───────────────────────────────────────────────────────────
     private void buildUI() {
         add(buildHeader(), BorderLayout.NORTH);
 
@@ -128,19 +170,40 @@ public class TransaksiPanel extends JPanel {
         return panel;
     }
 
+    // ── Stats Cards ──────────────────────────────────────────────────────────
     private JPanel buildStatsPanel() {
         JPanel panel = new JPanel(new GridLayout(1, 3, 14, 0));
         panel.setOpaque(false);
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 95));
 
-        panel.add(buildStatCard("Total Pemasukan", "Rp 14.0Jt", CARD_GREEN, Color.WHITE, new Color(255,255,255,180)));
-        panel.add(buildStatCard("Total Pengeluaran", "Rp 1.3Jt", CARD_RED, Color.WHITE, new Color(255,255,255,180)));
-        panel.add(buildStatCard("Total Transaksi", "10", BG_WHITE, TEXT_DARK, TEXT_GRAY));
+        // Card 1: Pemasukan
+        JPanel c1 = makeStatCard(CARD_GREEN);
+        c1.add(lbl("Total Pemasukan", FONT_LABEL, new Color(255, 255, 255, 180)));
+        c1.add(Box.createVerticalStrut(8));
+        lblPemasukan = lbl("...", FONT_AMOUNT, Color.WHITE);
+        c1.add(lblPemasukan);
+        panel.add(c1);
+
+        // Card 2: Pengeluaran
+        JPanel c2 = makeStatCard(CARD_RED);
+        c2.add(lbl("Total Pengeluaran", FONT_LABEL, new Color(255, 255, 255, 180)));
+        c2.add(Box.createVerticalStrut(8));
+        lblPengeluaran = lbl("...", FONT_AMOUNT, Color.WHITE);
+        c2.add(lblPengeluaran);
+        panel.add(c2);
+
+        // Card 3: Total
+        JPanel c3 = makeStatCard(BG_WHITE);
+        c3.add(lbl("Total Transaksi", FONT_LABEL, TEXT_GRAY));
+        c3.add(Box.createVerticalStrut(8));
+        lblTotalTransaksi = lbl("...", FONT_AMOUNT, TEXT_DARK);
+        c3.add(lblTotalTransaksi);
+        panel.add(c3);
 
         return panel;
     }
 
-    private JPanel buildStatCard(String label, String amount, Color bg, Color amtColor, Color lblColor) {
+    private JPanel makeStatCard(Color bg) {
         JPanel card = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
@@ -155,23 +218,18 @@ public class TransaksiPanel extends JPanel {
         card.setOpaque(false);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(18, 20, 18, 20));
-
-        JLabel lbl = new JLabel(label);
-        lbl.setFont(FONT_LABEL);
-        lbl.setForeground(lblColor);
-        lbl.setAlignmentX(LEFT_ALIGNMENT);
-
-        JLabel amt = new JLabel(amount);
-        amt.setFont(FONT_AMOUNT);
-        amt.setForeground(amtColor);
-        amt.setAlignmentX(LEFT_ALIGNMENT);
-
-        card.add(lbl);
-        card.add(Box.createVerticalStrut(8));
-        card.add(amt);
         return card;
     }
 
+    private JLabel lbl(String text, Font font, Color color) {
+        JLabel l = new JLabel(text);
+        l.setFont(font);
+        l.setForeground(color);
+        l.setAlignmentX(LEFT_ALIGNMENT);
+        return l;
+    }
+
+    // ── Filter Panel ─────────────────────────────────────────────────────────
     private JPanel buildFilterPanel() {
         JPanel outer = new JPanel() {
             @Override
@@ -183,7 +241,7 @@ public class TransaksiPanel extends JPanel {
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 14, 14);
                 g2.setColor(BORDER_LIGHT);
                 g2.setStroke(new BasicStroke(1f));
-                g2.drawRoundRect(0, 0, getWidth()-1, getHeight()-1, 14, 14);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 14, 14);
                 g2.dispose();
             }
         };
@@ -224,8 +282,8 @@ public class TransaksiPanel extends JPanel {
         typeFilter.addActionListener(e -> filterTable());
 
         categoryFilter = createCombo(new String[]{
-            "Semua Kategori","Gaji","Belanja","Makanan & Minuman",
-            "Transport","Tagihan","Hiburan","Kesehatan"
+            "Semua Kategori", "Gaji", "Belanja", "Makanan & Minuman",
+            "Transport", "Tagihan", "Hiburan", "Kesehatan"
         });
         categoryFilter.addActionListener(e -> filterTable());
 
@@ -255,12 +313,13 @@ public class TransaksiPanel extends JPanel {
         return combo;
     }
 
+    // ── Table ────────────────────────────────────────────────────────────────
     private JScrollPane buildTable() {
-        String[] cols = {"Tanggal", "Deskripsi", "Kategori", "Metode", "Jumlah", "Aksi"};
+        // Kolom 6 = ID (hidden)
+        String[] cols = {"Tanggal", "Deskripsi", "Kategori", "Metode", "Jumlah", "Aksi", "ID"};
         tableModel = new DefaultTableModel(cols, 0) {
             public boolean isCellEditable(int r, int c) { return false; }
         };
-        loadTableData(sampleData);
 
         JTable table = new JTable(tableModel) {
             @Override
@@ -283,6 +342,11 @@ public class TransaksiPanel extends JPanel {
         table.setIntercellSpacing(new Dimension(0, 0));
         table.setFillsViewportHeight(true);
 
+        // Sembunyikan kolom ID
+        table.getColumnModel().getColumn(6).setMinWidth(0);
+        table.getColumnModel().getColumn(6).setMaxWidth(0);
+        table.getColumnModel().getColumn(6).setWidth(0);
+
         JTableHeader header = table.getTableHeader();
         header.setFont(FONT_TABLE_H);
         header.setForeground(TEXT_GRAY);
@@ -300,8 +364,7 @@ public class TransaksiPanel extends JPanel {
                 return this;
             }
         };
-        for (int i = 0; i < table.getColumnCount(); i++)
-            table.getColumnModel().getColumn(i).setHeaderRenderer(hdrR);
+        for (int i = 0; i < 6; i++) table.getColumnModel().getColumn(i).setHeaderRenderer(hdrR);
 
         int[] widths = {110, 220, 140, 130, 160, 60};
         for (int i = 0; i < widths.length; i++)
@@ -319,13 +382,13 @@ public class TransaksiPanel extends JPanel {
         DefaultTableCellRenderer catR = new DefaultTableCellRenderer() {
             public Component getTableCellRendererComponent(JTable t, Object v,
                     boolean sel, boolean focus, int row, int col) {
-                JLabel lbl = new JLabel(v != null ? v.toString() : "");
-                lbl.setFont(new Font("Segoe UI", Font.BOLD, 11));
-                lbl.setForeground(ACCENT_PURPLE);
-                lbl.setBorder(new EmptyBorder(0, 14, 0, 14));
-                lbl.setOpaque(true);
-                lbl.setBackground(row % 2 == 0 ? BG_WHITE : new Color(246, 246, 250));
-                return lbl;
+                JLabel l = new JLabel(v != null ? v.toString() : "");
+                l.setFont(new Font("Segoe UI", Font.BOLD, 11));
+                l.setForeground(ACCENT_PURPLE);
+                l.setBorder(new EmptyBorder(0, 14, 0, 14));
+                l.setOpaque(true);
+                l.setBackground(row % 2 == 0 ? BG_WHITE : new Color(246, 246, 250));
+                return l;
             }
         };
         DefaultTableCellRenderer amtR = new DefaultTableCellRenderer() {
@@ -343,13 +406,13 @@ public class TransaksiPanel extends JPanel {
         DefaultTableCellRenderer delR = new DefaultTableCellRenderer() {
             public Component getTableCellRendererComponent(JTable t, Object v,
                     boolean sel, boolean focus, int row, int col) {
-                JLabel lbl = new JLabel("✕");
-                lbl.setFont(new Font("Segoe UI", Font.BOLD, 14));
-                lbl.setForeground(CARD_RED);
-                lbl.setHorizontalAlignment(SwingConstants.CENTER);
-                lbl.setOpaque(true);
-                lbl.setBackground(row % 2 == 0 ? BG_WHITE : new Color(246, 246, 250));
-                return lbl;
+                JLabel l = new JLabel("✕");
+                l.setFont(new Font("Segoe UI", Font.BOLD, 14));
+                l.setForeground(CARD_RED);
+                l.setHorizontalAlignment(SwingConstants.CENTER);
+                l.setOpaque(true);
+                l.setBackground(row % 2 == 0 ? BG_WHITE : new Color(246, 246, 250));
+                return l;
             }
         };
 
@@ -365,7 +428,11 @@ public class TransaksiPanel extends JPanel {
                 if (col == 5 && row >= 0) {
                     int ok = JOptionPane.showConfirmDialog(TransaksiPanel.this,
                         "Hapus transaksi ini?", "Konfirmasi", JOptionPane.YES_NO_OPTION);
-                    if (ok == JOptionPane.YES_OPTION) tableModel.removeRow(row);
+                    if (ok == JOptionPane.YES_OPTION) {
+                        int id = (int) tableModel.getValueAt(row, 6);
+                        TransaksiDAO.delete(id);
+                        loadFromDB();
+                    }
                 }
             }
         });
@@ -377,6 +444,7 @@ public class TransaksiPanel extends JPanel {
         return scroll;
     }
 
+    // ── Filter ───────────────────────────────────────────────────────────────
     private void filterTable() {
         String search = searchField.getText().toLowerCase().trim();
         if (search.equals("cari transaksi...") || search.startsWith("  cari")) search = "";
@@ -384,29 +452,19 @@ public class TransaksiPanel extends JPanel {
         String kat  = categoryFilter.getSelectedItem().toString();
 
         tableModel.setRowCount(0);
-        for (Object[] row : sampleData) {
-            String desc   = row[1].toString().toLowerCase();
-            String cat    = row[2].toString();
-            boolean isInc = (boolean) row[5];
-            long amount   = (long) row[4];
-
-            boolean mSearch = search.isEmpty() || desc.contains(search);
+        for (Transaksi t : allData) {
+            boolean mSearch = search.isEmpty() || t.getDeskripsi().toLowerCase().contains(search);
             boolean mType   = tipe.equals("Semua Tipe") ||
-                (tipe.equals("Pemasukan") && isInc) ||
-                (tipe.equals("Pengeluaran") && !isInc);
-            boolean mKat    = kat.equals("Semua Kategori") || cat.equals(kat);
+                (tipe.equals("Pemasukan") && t.isPemasukan()) ||
+                (tipe.equals("Pengeluaran") && !t.isPemasukan());
+            boolean mKat    = kat.equals("Semua Kategori") || t.getKategori().equals(kat);
 
-            if (mSearch && mType && mKat)
-                tableModel.addRow(new Object[]{row[0], row[1], cat, row[3], formatAmount(amount, isInc), "✕"});
-        }
-    }
-
-    private void loadTableData(Object[][] data) {
-        tableModel.setRowCount(0);
-        for (Object[] row : data) {
-            long amount = (long) row[4];
-            boolean isInc = (boolean) row[5];
-            tableModel.addRow(new Object[]{row[0], row[1], row[2], row[3], formatAmount(amount, isInc), "✕"});
+            if (mSearch && mType && mKat) {
+                tableModel.addRow(new Object[]{
+                    t.getTanggalDisplay(), t.getDeskripsi(), t.getKategori(),
+                    t.getMetode(), formatAmount(t.getJumlah(), t.isPemasukan()), "✕", t.getId()
+                });
+            }
         }
     }
 
@@ -415,106 +473,141 @@ public class TransaksiPanel extends JPanel {
         return (income ? "+ Rp " : "- Rp ") + fmt;
     }
 
+    // ── Dialog Tambah Transaksi ───────────────────────────────────────────────
     private void showAddDialog() {
-        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this),
-            "Tambah Transaksi", Dialog.ModalityType.APPLICATION_MODAL);
-        dialog.setSize(400, 430);
-        dialog.setLocationRelativeTo(this);
+    JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this),
+        "Tambah Transaksi", Dialog.ModalityType.APPLICATION_MODAL);
+    dialog.setSize(400, 460);
+    dialog.setLocationRelativeTo(this);
 
-        JPanel content = new JPanel();
-        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        content.setBackground(BG_WHITE);
-        content.setBorder(new EmptyBorder(24, 26, 24, 26));
+    JPanel content = new JPanel();
+    content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+    content.setBackground(BG_WHITE);
+    content.setBorder(new EmptyBorder(24, 26, 24, 26));
 
-        JLabel title = new JLabel("Tambah Transaksi Baru");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 18));
-        title.setForeground(TEXT_DARK);
-        title.setAlignmentX(LEFT_ALIGNMENT);
-        content.add(title);
-        content.add(Box.createVerticalStrut(16));
+    JLabel title = new JLabel("Tambah Transaksi Baru");
+    title.setFont(new Font("Segoe UI", Font.BOLD, 18));
+    title.setForeground(TEXT_DARK);
+    title.setAlignmentX(LEFT_ALIGNMENT);
+    content.add(title);
+    content.add(Box.createVerticalStrut(16));
 
-        String[] fieldNames = {"Deskripsi", "Jumlah (Rp)", "Kategori", "Metode", "Tanggal (DD MMM YYYY)"};
-        JTextField[] inputs = new JTextField[fieldNames.length];
-        for (int i = 0; i < fieldNames.length; i++) {
-            JLabel lbl = new JLabel(fieldNames[i]);
-            lbl.setFont(FONT_LABEL);
-            lbl.setForeground(TEXT_GRAY);
-            lbl.setAlignmentX(LEFT_ALIGNMENT);
-            content.add(lbl);
-            content.add(Box.createVerticalStrut(4));
-            inputs[i] = new JTextField();
-            inputs[i].setFont(FONT_LABEL);
-            inputs[i].setForeground(TEXT_DARK);
-            inputs[i].setBackground(new Color(245, 245, 248));
-            inputs[i].setBorder(BorderFactory.createCompoundBorder(
-                new RoundedBorder(8, BORDER_LIGHT),
-                new EmptyBorder(7, 10, 7, 10)
-            ));
-            inputs[i].setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
-            inputs[i].setAlignmentX(LEFT_ALIGNMENT);
-            content.add(inputs[i]);
-            content.add(Box.createVerticalStrut(10));
+    // ── Field biasa ──────────────────────────────────────────────────────
+    String[] fieldNames = {"Deskripsi", "Jumlah (Rp)", "Tanggal (dd MMM yyyy)"};
+    JTextField[] inputs = new JTextField[fieldNames.length];
+    for (int i = 0; i < fieldNames.length; i++) {
+        JLabel l = new JLabel(fieldNames[i]);
+        l.setFont(FONT_LABEL); l.setForeground(TEXT_GRAY); l.setAlignmentX(LEFT_ALIGNMENT);
+        content.add(l);
+        content.add(Box.createVerticalStrut(4));
+        inputs[i] = new JTextField();
+        inputs[i].setFont(FONT_LABEL);
+        inputs[i].setForeground(TEXT_DARK);
+        inputs[i].setBackground(new Color(245, 245, 248));
+        inputs[i].setBorder(BorderFactory.createCompoundBorder(
+            new RoundedBorder(8, BORDER_LIGHT), new EmptyBorder(7, 10, 7, 10)));
+        inputs[i].setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+        inputs[i].setAlignmentX(LEFT_ALIGNMENT);
+        content.add(inputs[i]);
+        content.add(Box.createVerticalStrut(10));
+    }
+    inputs[2].setText(new SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH).format(new java.util.Date()));
+
+    // ── Dropdown Kategori dari DB ─────────────────────────────────────────
+    JLabel katLabel = new JLabel("Kategori");
+    katLabel.setFont(FONT_LABEL); katLabel.setForeground(TEXT_GRAY); katLabel.setAlignmentX(LEFT_ALIGNMENT);
+    content.add(katLabel);
+    content.add(Box.createVerticalStrut(4));
+
+    // Load kategori dari DB: Map nama -> id
+    java.util.LinkedHashMap<String, Long> kategoriMap = new java.util.LinkedHashMap<>();
+    try {
+        java.sql.ResultSet rs = DBConnection.getConnection().createStatement()
+            .executeQuery("SELECT kategori_id, nama_kategori FROM kategori ORDER BY nama_kategori");
+        while (rs.next()) kategoriMap.put(rs.getString("nama_kategori"), rs.getLong("kategori_id"));
+    } catch (java.sql.SQLException ex) { ex.printStackTrace(); }
+
+    JComboBox<String> katCombo = new JComboBox<>(kategoriMap.keySet().toArray(new String[0]));
+    katCombo.setFont(FONT_LABEL);
+    katCombo.setBackground(new Color(245, 245, 248));
+    katCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+    katCombo.setAlignmentX(LEFT_ALIGNMENT);
+    content.add(katCombo);
+    content.add(Box.createVerticalStrut(10));
+
+    // ── Toggle Pemasukan / Pengeluaran ────────────────────────────────────
+    JPanel togglePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    togglePanel.setOpaque(false); togglePanel.setAlignmentX(LEFT_ALIGNMENT);
+    JToggleButton incBtn = new JToggleButton("Pemasukan");
+    JToggleButton expBtn = new JToggleButton("Pengeluaran");
+    styleToggle(incBtn, CARD_GREEN); styleToggle(expBtn, CARD_RED);
+    ButtonGroup bg = new ButtonGroup();
+    bg.add(incBtn); bg.add(expBtn);
+    incBtn.setSelected(true);
+    togglePanel.add(incBtn);
+    togglePanel.add(Box.createHorizontalStrut(10));
+    togglePanel.add(expBtn);
+    content.add(togglePanel);
+    content.add(Box.createVerticalStrut(18));
+
+    // ── Tombol Simpan ─────────────────────────────────────────────────────
+    JButton saveBtn = new JButton("Simpan") {
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(getModel().isRollover() ? ACCENT_PURPLE.darker() : ACCENT_PURPLE);
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    };
+    saveBtn.setFont(FONT_BTN); saveBtn.setForeground(Color.WHITE);
+    saveBtn.setContentAreaFilled(false); saveBtn.setBorderPainted(false); saveBtn.setFocusPainted(false);
+    saveBtn.setAlignmentX(LEFT_ALIGNMENT);
+    saveBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+
+    saveBtn.addActionListener(e -> {
+        String desc   = inputs[0].getText().trim();
+        String amtStr = inputs[1].getText().trim().replaceAll("[^0-9]", "");
+        String dateStr = inputs[2].getText().trim();
+        boolean isInc = incBtn.isSelected();
+        String selectedKat = (String) katCombo.getSelectedItem();
+
+        if (desc.isEmpty() || amtStr.isEmpty()) {
+            JOptionPane.showMessageDialog(dialog, "Deskripsi dan jumlah wajib diisi!",
+                "Peringatan", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (selectedKat == null || !kategoriMap.containsKey(selectedKat)) {
+            JOptionPane.showMessageDialog(dialog, "Pilih kategori terlebih dahulu!",
+                "Peringatan", JOptionPane.WARNING_MESSAGE);
+            return;
         }
 
-        JPanel togglePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        togglePanel.setOpaque(false);
-        togglePanel.setAlignmentX(LEFT_ALIGNMENT);
-        JToggleButton incBtn = new JToggleButton("Pemasukan");
-        JToggleButton expBtn = new JToggleButton("Pengeluaran");
-        styleToggle(incBtn, CARD_GREEN);
-        styleToggle(expBtn, CARD_RED);
-        ButtonGroup bg = new ButtonGroup();
-        bg.add(incBtn); bg.add(expBtn);
-        incBtn.setSelected(true);
-        togglePanel.add(incBtn);
-        togglePanel.add(Box.createHorizontalStrut(10));
-        togglePanel.add(expBtn);
-        content.add(togglePanel);
-        content.add(Box.createVerticalStrut(18));
+        Date sqlDate;
+        try {
+            sqlDate = new Date(new SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH).parse(dateStr).getTime());
+        } catch (ParseException ex) {
+            sqlDate = new Date(System.currentTimeMillis());
+        }
 
-        JButton saveBtn = new JButton("Simpan") {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getModel().isRollover() ? ACCENT_PURPLE.darker() : ACCENT_PURPLE);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        saveBtn.setFont(FONT_BTN);
-        saveBtn.setForeground(Color.WHITE);
-        saveBtn.setContentAreaFilled(false);
-        saveBtn.setBorderPainted(false);
-        saveBtn.setFocusPainted(false);
-        saveBtn.setAlignmentX(LEFT_ALIGNMENT);
-        saveBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
-        saveBtn.addActionListener(e -> {
-            String desc   = inputs[0].getText().trim();
-            String amtStr = inputs[1].getText().trim().replaceAll("[^0-9]", "");
-            String cat    = inputs[2].getText().trim().isEmpty() ? "Lainnya" : inputs[2].getText().trim();
-            String method = inputs[3].getText().trim().isEmpty() ? "Cash" : inputs[3].getText().trim();
-            String date   = inputs[4].getText().trim().isEmpty() ? "01 Jan 2025" : inputs[4].getText().trim();
-            boolean isInc = incBtn.isSelected();
-            if (desc.isEmpty() || amtStr.isEmpty()) {
-                JOptionPane.showMessageDialog(dialog, "Deskripsi dan jumlah wajib diisi!",
-                    "Peringatan", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-            long amount = Long.parseLong(amtStr);
-            Object[][] newData = new Object[sampleData.length + 1][6];
-            newData[0] = new Object[]{date, desc, cat, method, amount, isInc};
-            System.arraycopy(sampleData, 0, newData, 1, sampleData.length);
-            sampleData = newData;
-            tableModel.insertRow(0, new Object[]{date, desc, cat, method, formatAmount(amount, isInc), "✕"});
-            dialog.dispose();
-        });
-        content.add(saveBtn);
+        Transaksi t = new Transaksi();
+        t.setUmkmId(1L);
+        t.setKategoriId(kategoriMap.get(selectedKat));
+        t.setTanggal(sqlDate);
+        t.setDeskripsi(desc);
+        t.setJumlah(Long.parseLong(amtStr));
+        t.setTipe(isInc ? "PEMASUKAN" : "PENGELUARAN");
+        TransaksiDAO.insert(t);
 
-        dialog.setContentPane(content);
-        dialog.setVisible(true);
-    }
+        loadFromDB();
+        dialog.dispose();
+    });
+
+    content.add(saveBtn);
+    dialog.setContentPane(content);
+    dialog.setVisible(true);
+}
 
     private void styleToggle(JToggleButton btn, Color color) {
         btn.setFont(FONT_LABEL);
@@ -536,9 +629,9 @@ public class TransaksiPanel extends JPanel {
         });
     }
 
-    // Inner class border
+    // ── Inner Border ─────────────────────────────────────────────────────────
     static class RoundedBorder implements Border {
-        private final int radius;
+        private final int   radius;
         private final Color color;
         RoundedBorder(int r, Color c) { radius = r; color = c; }
         public Insets getBorderInsets(Component c) { return new Insets(2, 2, 2, 2); }

@@ -5,9 +5,11 @@ import javax.swing.border.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Calendar;
 
 public class AnggaranPanel extends JPanel {
 
@@ -28,43 +30,22 @@ public class AnggaranPanel extends JPanel {
     private static final Color BAR_BLUE    = new Color(0x3B82F6);
     private static final Color BAR_RED     = new Color(0xEF4444);
 
-    private static final String[] KATEGORI_LIST = {
-        "Pilih Kategori", "Makanan & Minuman", "Transport",
-        "Belanja", "Tagihan", "Hiburan", "Kesehatan", "Lainnya"
-    };
+    // ── DAO ──────────────────────────────────────────────────────────────────
+    private final AnggaranDAO anggaranDAO;
+    private final KategoriDAO kategoriDAO;
 
-    // ── Data Model ───────────────────────────────────────────────────────────
-    static class BudgetItem {
-        String name, bulan;
-        double budget, spent;
-
-        BudgetItem(String name, double budget, double spent, String bulan) {
-            this.name = name; this.budget = budget;
-            this.spent = spent; this.bulan = bulan;
-        }
-        double pct()        { return budget == 0 ? 0 : spent / budget * 100; }
-        double sisa()       { return budget - spent; }
-        boolean isWarning() { return pct() >= 90; }
-        Color barColor() {
-            if (pct() >= 90) return new Color(0xEF4444);
-            if (pct() >= 75) return new Color(0xF59E0B);
-            return new Color(0x22C55E);
-        }
-    }
-
-    private final List<BudgetItem> items = new ArrayList<>(Arrays.asList(
-        new BudgetItem("Makanan & Minuman", 3.0, 2.8, "Januari 2025"),
-        new BudgetItem("Transport",          1.5, 1.2, "Januari 2025"),
-        new BudgetItem("Belanja",            2.0, 1.8, "Januari 2025"),
-        new BudgetItem("Tagihan",            1.8, 1.5, "Januari 2025"),
-        new BudgetItem("Hiburan",            1.0, 0.7, "Januari 2025"),
-        new BudgetItem("Kesehatan",          1.2, 0.4, "Januari 2025")
-    ));
+    // ── Data ─────────────────────────────────────────────────────────────────
+    private List<AnggaranDAO.AnggaranItem> items = new ArrayList<>();
+    private List<KategoriDAO.Kategori>     kategoriList = new ArrayList<>();
 
     private JPanel contentPanel;
 
     // ── Constructor ──────────────────────────────────────────────────────────
     public AnggaranPanel() {
+        long umkmId = SessionManager.getUmkmId();
+        anggaranDAO = new AnggaranDAO(umkmId);
+        kategoriDAO = new KategoriDAO(umkmId);
+
         setLayout(new BorderLayout());
         setBackground(BG);
         setBorder(new EmptyBorder(28, 32, 28, 32));
@@ -75,12 +56,24 @@ public class AnggaranPanel extends JPanel {
         contentPanel = new JPanel();
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
         contentPanel.setOpaque(false);
+
+        loadFromDB();
         refreshContent();
 
         add(contentPanel, BorderLayout.CENTER);
     }
 
-    // ── Refresh ──────────────────────────────────────────────────────────────
+    /** Load data anggaran dari database */
+    private void loadFromDB() {
+        try {
+            items = anggaranDAO.getAll();
+            kategoriList = kategoriDAO.getPengeluaran();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // ── Refresh UI ────────────────────────────────────────────────────────────
     private void refreshContent() {
         contentPanel.removeAll();
         contentPanel.add(buildSummaryRow());
@@ -127,7 +120,7 @@ public class AnggaranPanel extends JPanel {
 
     // ── Summary Row ──────────────────────────────────────────────────────────
     private JPanel buildSummaryRow() {
-        double totalA = items.stream().mapToDouble(i -> i.budget).sum();
+        double totalA = items.stream().mapToDouble(i -> i.limitAnggaran).sum();
         double totalT = items.stream().mapToDouble(i -> i.spent).sum();
         double totalS = totalA - totalT;
         double pct    = totalA == 0 ? 0 : totalT / totalA * 100;
@@ -207,11 +200,19 @@ public class AnggaranPanel extends JPanel {
         JPanel grid = new JPanel(new GridLayout(0, 2, 16, 16));
         grid.setOpaque(false);
         grid.setAlignmentX(LEFT_ALIGNMENT);
-        for (BudgetItem item : items) grid.add(buildCard(item));
+
+        if (items.isEmpty()) {
+            JLabel empty = new JLabel("Belum ada anggaran. Klik '+ Buat Anggaran' untuk memulai.");
+            empty.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+            empty.setForeground(TEXT_SUB);
+            grid.add(empty);
+        } else {
+            for (AnggaranDAO.AnggaranItem item : items) grid.add(buildCard(item));
+        }
         return grid;
     }
 
-    private JPanel buildCard(BudgetItem item) {
+    private JPanel buildCard(AnggaranDAO.AnggaranItem item) {
         JPanel card = new CardPanel();
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(18, 20, 18, 20));
@@ -221,7 +222,7 @@ public class AnggaranPanel extends JPanel {
         top.setOpaque(false);
         top.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 
-        JLabel name = new JLabel(item.name);
+        JLabel name = new JLabel(item.namaKategori);
         name.setFont(new Font("Segoe UI", Font.BOLD, 15));
         name.setForeground(TEXT_MAIN);
 
@@ -232,47 +233,57 @@ public class AnggaranPanel extends JPanel {
         edit.addActionListener(e -> showBuatDialog(item));
         del.addActionListener(e -> {
             int ok = JOptionPane.showConfirmDialog(this,
-                "Hapus anggaran \"" + item.name + "\"?",
+                "Hapus anggaran \"" + item.namaKategori + "\"?",
                 "Konfirmasi", JOptionPane.YES_NO_OPTION);
-            if (ok == JOptionPane.YES_OPTION) { items.remove(item); refreshContent(); }
+            if (ok == JOptionPane.YES_OPTION) {
+                try {
+                    anggaranDAO.hapus(item.anggaranId);
+                    loadFromDB();
+                    refreshContent();
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(this,
+                        "Gagal menghapus: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
         });
         btns.add(edit); btns.add(del);
         top.add(name, BorderLayout.WEST);
         top.add(btns, BorderLayout.EAST);
 
-        // -- bulan
-        JLabel bulan = new JLabel(item.bulan);
+        JLabel bulan = new JLabel(item.getBulanStr());
         bulan.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         bulan.setForeground(TEXT_SUB);
         bulan.setAlignmentX(LEFT_ALIGNMENT);
 
-        // -- terpakai label
         JPanel spentRow = new JPanel(new BorderLayout());
         spentRow.setOpaque(false);
         spentRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
         JLabel sl = new JLabel("Terpakai");
         sl.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         sl.setForeground(TEXT_SUB);
-        JLabel sv = new JLabel(String.format("Rp %.1fJt / Rp %.1fJt", item.spent, item.budget));
+        JLabel sv = new JLabel(String.format("Rp %.1fJt / Rp %.1fJt",
+            item.spent / 1_000_000.0, item.limitAnggaran / 1_000_000.0));
         sv.setFont(new Font("Segoe UI", Font.BOLD, 13));
         sv.setForeground(TEXT_MAIN);
         spentRow.add(sl, BorderLayout.WEST);
         spentRow.add(sv, BorderLayout.EAST);
 
-        // -- progress bar
-        ProgBar pb = new ProgBar(item.pct() / 100.0, item.barColor());
+        double pct = item.pct();
+        Color barColor = pct >= 90 ? new Color(0xEF4444) : pct >= 75 ? new Color(0xF59E0B) : new Color(0x22C55E);
+
+        ProgBar pb = new ProgBar(pct / 100.0, barColor);
         pb.setMaximumSize(new Dimension(Integer.MAX_VALUE, 10));
         pb.setPreferredSize(new Dimension(0, 10));
         pb.setAlignmentX(LEFT_ALIGNMENT);
 
-        // -- pct + sisa
         JPanel pctRow = new JPanel(new BorderLayout());
         pctRow.setOpaque(false);
         pctRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 22));
-        JLabel pl = new JLabel((item.isWarning() ? "⚠ " : "✓ ") + String.format("%.1f%% terpakai", item.pct()));
+        JLabel pl = new JLabel((item.isWarning() ? "⚠ " : "✓ ") + String.format("%.1f%% terpakai", pct));
         pl.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        pl.setForeground(item.barColor());
-        JLabel pr = new JLabel(String.format("Sisa: Rp %.1fJt", item.sisa()));
+        pl.setForeground(barColor);
+        JLabel pr = new JLabel(String.format("Sisa: Rp %.1fJt", item.sisa() / 1_000_000.0));
         pr.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         pr.setForeground(TEXT_SUB);
         pctRow.add(pl, BorderLayout.WEST);
@@ -322,88 +333,93 @@ public class AnggaranPanel extends JPanel {
         return w;
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    // DIALOG - Buat / Edit Anggaran
-    // ════════════════════════════════════════════════════════════════════════
-    private void showBuatDialog(BudgetItem editItem) {
+    // ── Dialog Buat / Edit ────────────────────────────────────────────────────
+    private void showBuatDialog(AnggaranDAO.AnggaranItem editItem) {
         boolean isEdit = (editItem != null);
-        String  title  = isEdit ? "Edit Anggaran" : "Buat Anggaran Baru";
+        String  dlgTitle = isEdit ? "Edit Anggaran" : "Buat Anggaran Baru";
 
-        // ── Window ──────────────────────────────────────────────────────────
         Window owner = SwingUtilities.getWindowAncestor(this);
         JDialog dlg;
-        if (owner instanceof Frame) dlg = new JDialog((Frame) owner, title, true);
-        else                        dlg = new JDialog((Dialog) owner, title, true);
-        dlg.setSize(460, 480);
+        if (owner instanceof Frame) dlg = new JDialog((Frame) owner, dlgTitle, true);
+        else                        dlg = new JDialog((Dialog) owner, dlgTitle, true);
+        dlg.setSize(460, 440);
         dlg.setLocationRelativeTo(this);
         dlg.setResizable(false);
         dlg.setLayout(new BorderLayout());
         dlg.getContentPane().setBackground(WHITE);
 
-        // ── Title bar ────────────────────────────────────────────────────────
+        // Title bar
         JPanel titleBar = new JPanel(new BorderLayout());
         titleBar.setBackground(new Color(0xF8F7FF));
         titleBar.setBorder(new CompoundBorder(
             new MatteBorder(0,0,1,0, BORDER_CLR),
             new EmptyBorder(22,28,22,28)
         ));
-        JLabel titleLbl = new JLabel(title);
+        JLabel titleLbl = new JLabel(dlgTitle);
         titleLbl.setFont(new Font("Segoe UI", Font.BOLD, 20));
         titleLbl.setForeground(TEXT_MAIN);
         titleBar.add(titleLbl, BorderLayout.WEST);
         dlg.add(titleBar, BorderLayout.NORTH);
 
-        // ── Form ─────────────────────────────────────────────────────────────
+        // Form
         JPanel form = new JPanel();
         form.setBackground(WHITE);
         form.setLayout(new BoxLayout(form, BoxLayout.Y_AXIS));
         form.setBorder(new EmptyBorder(24,28,12,28));
 
-        // Kategori
-        JComboBox<String> cbKat = new JComboBox<>(KATEGORI_LIST);
-        if (isEdit) cbKat.setSelectedItem(editItem.name);
+        // Kategori dropdown dari DB
+        String[] katNames = kategoriList.stream()
+            .map(k -> k.namaKategori).toArray(String[]::new);
+        String[] katAll = new String[katNames.length + 1];
+        katAll[0] = "Pilih Kategori";
+        System.arraycopy(katNames, 0, katAll, 1, katNames.length);
+        JComboBox<String> cbKat = new JComboBox<>(katAll);
+        if (isEdit) cbKat.setSelectedItem(editItem.namaKategori);
         styleCombo(cbKat);
 
         // Limit
-        JTextField tfLimit = new JTextField();
-        if (isEdit) tfLimit.setText(String.valueOf((long)(editItem.budget * 1_000_000)));
-        else        tfLimit.putClientProperty("placeholder","Contoh: 3000000");
-        styleField(tfLimit, isEdit ? "" : "Contoh: 3000000");
-
-        // Terpakai
-        JTextField tfTerpakai = new JTextField();
-        if (isEdit) tfTerpakai.setText(String.valueOf((long)(editItem.spent * 1_000_000)));
-        else        tfTerpakai.setText("0");
-        styleField(tfTerpakai, "0");
+        JTextField tfLimit = new JTextField(
+            isEdit ? String.valueOf((long) editItem.limitAnggaran) : "");
+        styleField(tfLimit, "Contoh: 3000000");
 
         // Bulan
-        JTextField tfBulan = new JTextField(isEdit ? editItem.bulan : getBulan());
-        styleField(tfBulan, "");
+        String[] bulanNames = {"Januari","Februari","Maret","April","Mei","Juni",
+                               "Juli","Agustus","September","Oktober","November","Desember"};
+        JComboBox<String> cbBulan = new JComboBox<>(bulanNames);
+        if (isEdit) cbBulan.setSelectedIndex(editItem.bulan - 1);
+        else        cbBulan.setSelectedIndex(Calendar.getInstance().get(Calendar.MONTH));
+        styleCombo(cbBulan);
 
-        addRow(form, "Kategori *",             cbKat);
-        addRow(form, "Limit Anggaran (Rp) *",  tfLimit);
-        addRow(form, "Terpakai (Rp)",           tfTerpakai);
-        addRow(form, "Bulan *",                 tfBulan);
+        // Tahun
+        int thisYear = Calendar.getInstance().get(Calendar.YEAR);
+        JComboBox<Integer> cbTahun = new JComboBox<>(
+            new Integer[]{thisYear - 1, thisYear, thisYear + 1});
+        if (isEdit) cbTahun.setSelectedItem(editItem.tahun);
+        else        cbTahun.setSelectedItem(thisYear);
+        styleCombo(cbTahun);
+
+        addRow(form, "Kategori *",            cbKat);
+        addRow(form, "Limit Anggaran (Rp) *", tfLimit);
+        addRow(form, "Bulan *",               cbBulan);
+        addRow(form, "Tahun *",               cbTahun);
 
         dlg.add(form, BorderLayout.CENTER);
 
-        // ── Buttons ──────────────────────────────────────────────────────────
-        JPanel btnRow = new JPanel(new GridLayout(1,2,14,0));
+        // Buttons
+        JPanel btnRow = new JPanel(new GridLayout(1, 2, 14, 0));
         btnRow.setBackground(WHITE);
         btnRow.setBorder(new CompoundBorder(
             new MatteBorder(1,0,0,0, BORDER_CLR),
             new EmptyBorder(18,28,22,28)
         ));
 
-        // Batal (outlined)
         JButton btnBatal = new JButton("Batal") {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(getModel().isPressed() ? new Color(0xF1F5F9) : WHITE);
                 g2.fill(new RoundRectangle2D.Double(0,0,getWidth(),getHeight(),12,12));
-                g2.setColor(BORDER_CLR);
-                g2.setStroke(new BasicStroke(1.5f));
+                g2.setColor(BORDER_CLR); g2.setStroke(new BasicStroke(1.5f));
                 g2.draw(new RoundRectangle2D.Double(1,1,getWidth()-2,getHeight()-2,12,12));
                 g2.dispose(); super.paintComponent(g);
             }
@@ -411,54 +427,56 @@ public class AnggaranPanel extends JPanel {
         btnBatal.setContentAreaFilled(false); btnBatal.setBorderPainted(false); btnBatal.setFocusPainted(false);
         btnBatal.setFont(new Font("Segoe UI", Font.BOLD, 14)); btnBatal.setForeground(TEXT_MAIN);
         btnBatal.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btnBatal.setPreferredSize(new Dimension(0,46));
+        btnBatal.setPreferredSize(new Dimension(0, 46));
         btnBatal.addActionListener(e -> dlg.dispose());
 
-        // Simpan
         JButton btnSimpan = new RoundButton("Simpan", PURPLE, WHITE);
         btnSimpan.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        btnSimpan.setPreferredSize(new Dimension(0,46));
+        btnSimpan.setPreferredSize(new Dimension(0, 46));
         btnSimpan.addActionListener(e -> {
-            // --- Validasi ---
-            String katStr   = (String) cbKat.getSelectedItem();
-            String limitStr = tfLimit.getText().trim();
-            String terpStr  = tfTerpakai.getText().trim();
-            String bulanStr = tfBulan.getText().trim();
+    String katStr   = (String) cbKat.getSelectedItem();
+    String limitStr = tfLimit.getText().trim();
+    int    bulanIdx = cbBulan.getSelectedIndex() + 1;
+    int    tahunVal = (Integer) cbTahun.getSelectedItem();
 
-            if ("Pilih Kategori".equals(katStr) || katStr == null) {
-                showErr(dlg, "Silakan pilih kategori terlebih dahulu!"); return;
-            }
-            if (limitStr.isEmpty()) {
-                showErr(dlg, "Limit Anggaran tidak boleh kosong!"); return;
-            }
-            if (bulanStr.isEmpty()) {
-                showErr(dlg, "Bulan tidak boleh kosong!"); return;
-            }
-            double limit, terp;
-            try { limit = Double.parseDouble(limitStr); }
-            catch (NumberFormatException ex) { showErr(dlg, "Limit Anggaran harus berupa angka!"); return; }
-            try { terp = terpStr.isEmpty() ? 0 : Double.parseDouble(terpStr); }
-            catch (NumberFormatException ex) { showErr(dlg, "Nilai Terpakai harus berupa angka!"); return; }
-            if (limit <= 0) { showErr(dlg, "Limit Anggaran harus lebih dari 0!"); return; }
-            if (terp < 0)   { showErr(dlg, "Nilai Terpakai tidak boleh negatif!"); return; }
+    if ("Pilih Kategori".equals(katStr)) {
+        showErr(dlg, "Silakan pilih kategori!"); return;
+    }
+    if (limitStr.isEmpty() || limitStr.equals("Contoh: 3000000")) {
+        showErr(dlg, "Limit anggaran tidak boleh kosong!"); return;
+    }
 
-            // --- Simpan ---
-            if (isEdit) {
-                editItem.name   = katStr;
-                editItem.budget = limit / 1_000_000.0;
-                editItem.spent  = terp  / 1_000_000.0;
-                editItem.bulan  = bulanStr;
-            } else {
-                items.add(new BudgetItem(katStr, limit / 1_000_000.0, terp / 1_000_000.0, bulanStr));
-            }
-            refreshContent();
-            dlg.dispose();
-        });
+    double limit;
+    try { limit = Double.parseDouble(limitStr); }
+    catch (NumberFormatException ex) { showErr(dlg, "Limit harus berupa angka!"); return; }
+    if (limit <= 0) { showErr(dlg, "Limit harus lebih dari 0!"); return; }
+
+    // ← BARU: cari kategoriId dari nama yang dipilih
+    long katId = kategoriList.stream()
+        .filter(k -> k.namaKategori.equals(katStr))
+        .mapToLong(k -> k.kategoriId)
+        .findFirst()
+        .orElse(-1L);
+
+    if (katId == -1L) {
+        showErr(dlg, "Kategori tidak ditemukan!"); return;
+    }
+
+    try {
+        if (isEdit) anggaranDAO.update(editItem.anggaranId, katId, limit, bulanIdx, tahunVal);
+        else        anggaranDAO.tambah(katId, limit, bulanIdx, tahunVal);
+        dlg.dispose();
+        loadFromDB();
+        refreshContent();
+    } catch (SQLException ex) {
+        ex.printStackTrace();
+        showErr(dlg, "Gagal menyimpan: " + ex.getMessage());
+    }
+});
 
         btnRow.add(btnBatal);
         btnRow.add(btnSimpan);
         dlg.add(btnRow, BorderLayout.SOUTH);
-
         dlg.setVisible(true);
     }
 
@@ -498,7 +516,7 @@ public class AnggaranPanel extends JPanel {
         }
     }
 
-    private void styleCombo(JComboBox<String> cb) {
+    private void styleCombo(JComboBox<?> cb) {
         cb.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         cb.setBackground(WHITE);
         cb.setForeground(TEXT_MAIN);
@@ -510,13 +528,8 @@ public class AnggaranPanel extends JPanel {
         JOptionPane.showMessageDialog(dlg, msg, "Peringatan", JOptionPane.WARNING_MESSAGE);
     }
 
-    private String fmtJt(double v) { return String.format("Rp %.1fJt", v); }
-
-    private String getBulan() {
-        String[] m = {"Januari","Februari","Maret","April","Mei","Juni",
-                       "Juli","Agustus","September","Oktober","November","Desember"};
-        Calendar c = Calendar.getInstance();
-        return m[c.get(Calendar.MONTH)] + " " + c.get(Calendar.YEAR);
+    private String fmtJt(double v) {
+        return String.format("Rp %.1fJt", v / 1_000_000.0);
     }
 
     private JButton iBtn(String icon, Color fg) {
@@ -528,10 +541,7 @@ public class AnggaranPanel extends JPanel {
         return b;
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    // Inner UI Classes
-    // ════════════════════════════════════════════════════════════════════════
-
+    // ── Inner UI Classes ─────────────────────────────────────────────────────
     static class CardPanel extends JPanel {
         CardPanel() { setOpaque(false); }
         @Override protected void paintComponent(Graphics g) {
@@ -580,10 +590,10 @@ public class AnggaranPanel extends JPanel {
 
     // ── Bar Chart ─────────────────────────────────────────────────────────────
     class BarChart extends JPanel {
-        private final List<BudgetItem> data;
+        private final List<AnggaranDAO.AnggaranItem> data;
         private int hover = -1;
 
-        BarChart(List<BudgetItem> data) {
+        BarChart(List<AnggaranDAO.AnggaranItem> data) {
             this.data = data;
             setOpaque(false);
             setPreferredSize(new Dimension(0, 220));
@@ -615,26 +625,24 @@ public class AnggaranPanel extends JPanel {
             int pL=56,pR=16,pT=12,pB=56;
             int cw=getWidth()-pL-pR, ch=getHeight()-pT-pB;
             int n=data.size();
-            double maxV=data.stream().mapToDouble(i->i.budget).max().orElse(3);
+            double maxV=data.stream().mapToDouble(i->i.limitAnggaran).max().orElse(1_000_000);
             double sc=ch/maxV;
             int gW=cw/n, bW=Math.max(8,gW/3), gap=4;
 
-            // Grid
             for(int i=0;i<=4;i++){
                 double v=maxV*i/4;
                 int y=getHeight()-pB-(int)(v*sc);
                 g2.setColor(new Color(0xE2E8F0)); g2.drawLine(pL,y,getWidth()-pR,y);
                 g2.setColor(TEXT_LIGHT); g2.setFont(new Font("Segoe UI",Font.PLAIN,11));
-                g2.drawString(String.format("%.1f",v),0,y+4);
+                g2.drawString(String.format("%.1fJt", v/1_000_000.0),0,y+4);
             }
 
-            // Bars + labels
             for(int i=0;i<n;i++){
-                BudgetItem it=data.get(i);
+                AnggaranDAO.AnggaranItem it=data.get(i);
                 int gx=pL+i*gW+(gW-2*bW-gap)/2;
                 if(i==hover){ g2.setColor(new Color(0,0,0,10)); g2.fillRoundRect(pL+i*gW,pT,gW,ch,6,6); }
 
-                int bh=(int)(it.budget*sc);
+                int bh=(int)(it.limitAnggaran*sc);
                 g2.setColor(BAR_BLUE); g2.fillRoundRect(gx,getHeight()-pB-bh,bW,bh,4,4);
                 int sh=(int)(it.spent*sc);
                 g2.setColor(BAR_RED);  g2.fillRoundRect(gx+bW+gap,getHeight()-pB-sh,bW,sh,4,4);
@@ -643,15 +651,14 @@ public class AnggaranPanel extends JPanel {
                 gr.translate(gx+bW, getHeight()-pB+8);
                 gr.rotate(Math.toRadians(28));
                 gr.setColor(TEXT_SUB); gr.setFont(new Font("Segoe UI",Font.PLAIN,10));
-                gr.drawString(it.name,0,0); gr.dispose();
+                gr.drawString(it.namaKategori,0,0); gr.dispose();
             }
 
-            // Tooltip
             if(hover>=0 && hover<data.size()){
-                BudgetItem it=data.get(hover);
-                String[] lines={it.name,
-                    String.format("Anggaran : Rp %.1fJt",it.budget),
-                    String.format("Terpakai : Rp %.1fJt",it.spent)};
+                AnggaranDAO.AnggaranItem it=data.get(hover);
+                String[] lines={it.namaKategori,
+                    String.format("Anggaran : Rp %.1fJt", it.limitAnggaran/1_000_000.0),
+                    String.format("Terpakai : Rp %.1fJt", it.spent/1_000_000.0)};
                 g2.setFont(new Font("Segoe UI",Font.PLAIN,12));
                 FontMetrics fm=g2.getFontMetrics();
                 int tw=0; for(String l:lines) tw=Math.max(tw,fm.stringWidth(l));
@@ -669,7 +676,6 @@ public class AnggaranPanel extends JPanel {
                 }
             }
 
-            // Legend
             int lx=pL, ly=getHeight()-10;
             g2.setColor(BAR_BLUE); g2.fillRoundRect(lx,ly-8,12,10,3,3);
             g2.setColor(TEXT_SUB); g2.setFont(new Font("Segoe UI",Font.PLAIN,11));

@@ -14,6 +14,28 @@ import java.awt.geom.*;
  * Bisa ditambahkan ke NetBeans Palette.
  */
 public class BudgetProgressPanel extends JPanel {
+    
+    public void loadFromDB() {
+        try {
+            AnggaranDAO dao = new AnggaranDAO(myfinance.SessionManager.getUmkmId());
+            java.util.List<AnggaranDAO.KategoriSpent> list = dao.getSpentBulanIni();
+            if (list.isEmpty()) return;
+ 
+            String[] names  = new String[list.size()];
+            double[] spent  = new double[list.size()];
+            double[] budget = new double[list.size()];
+            for (int i = 0; i < list.size(); i++) {
+                names[i]  = list.get(i).namaKategori;
+                spent[i]  = list.get(i).spent;
+                budget[i] = list.get(i).limit;
+            }
+            setCategoryNames(names);
+            setSpentValues(spent);
+            setBudgetValues(budget);
+        } catch (java.sql.SQLException e) {
+            e.printStackTrace();
+        }
+    }
 
     // ── Data ──────────────────────────────────────────────────────────────────
     private String[] categoryNames  = {"Makanan", "Transport", "Belanja", "Hiburan"};

@@ -6,6 +6,7 @@ package myfinance;
 
 import java.awt.Color;
 import java.awt.FlowLayout;
+import java.util.Calendar;
 import javax.swing.JPanel; 
 
 
@@ -17,7 +18,7 @@ import javax.swing.JPanel;
 public class MyFinance extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(MyFinance.class.getName());
-
+    private long umkmId = 1;
     /**
      * Creates new form MyFinance1
      */
@@ -25,8 +26,52 @@ public class MyFinance extends javax.swing.JFrame {
         initComponents();
         initButtonStyle();
         fixLayout();
+        loadDashboard();
     }
     
+    private void loadDashboard() {
+        try {
+            Calendar cal       = Calendar.getInstance();
+            int bulan          = cal.get(Calendar.MONTH) + 1;
+            int tahun          = cal.get(Calendar.YEAR);
+            long pemasukan   = TransaksiDAO.getTotalPemasukan(umkmId, bulan, tahun);
+            long pengeluaran = TransaksiDAO.getTotalPengeluaran(umkmId, bulan, tahun);
+            long saldo       = TransaksiDAO.getTotalSaldo(umkmId);
+            long jumlahTrx   = TransaksiDAO.getAll(umkmId).size();
+            long tabunganBulan = pemasukan - pengeluaran;
+
+            // Card 1 – Total Pemasukan bulan ini
+            cardPanel1.setAmount("Rp " + formatJt(pemasukan));
+            cardPanel1.setPercentage(jumlahTrx + " trx");
+
+            // Card 2 – Total Pengeluaran bulan ini
+            cardPanel2.setAmount("Rp " + formatJt(pengeluaran));
+            double pctOut = pemasukan == 0 ? 0 : (double) pengeluaran / pemasukan * 100;
+            cardPanel2.setPercentage(String.format("%.0f%% dari pemasukan", pctOut));
+
+            // Card 3 – Saldo all-time
+            cardPanel3.setAmount("Rp " + formatJt(Math.abs(saldo)));
+            cardPanel3.setPercentage(saldo >= 0 ? "Surplus" : "Defisit");
+
+            // Card 4 – Tabungan bulan ini (net)
+            cardPanel4.setAmount("Rp " + formatJt(Math.abs(tabunganBulan)));
+            cardPanel4.setPercentage(tabunganBulan >= 0 ? "Tersimpan" : "Minus");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        recentTransactionPanel1.loadFromDB();
+        trendChartPanel1.loadFromDB();
+        donutChartPanel1.loadFromDB();
+        budgetProgressPanel1.loadFromDB();
+    }
+ 
+    private String formatJt(double val) {
+        if (val >= 1_000_000) return String.format("%.1fJt", val / 1_000_000.0);
+        if (val >= 1_000)     return String.format("%.0fRb", val / 1_000.0);
+        return String.format("%.0f", val);
+    }
     
     private void fixLayout() {
     // Ambil gradientPanel dari jPanel1

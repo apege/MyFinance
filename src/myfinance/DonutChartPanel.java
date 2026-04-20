@@ -13,6 +13,44 @@ import java.awt.geom.*;
  * Bisa ditambahkan ke NetBeans Palette.
  */
 public class DonutChartPanel extends JPanel {
+    
+    public void loadFromDB() {
+    String sql =
+        "SELECT k.nama_kategori, SUM(t.jumlah) AS total " +
+        "FROM transaksi t " +
+        "JOIN kategori k ON k.kategori_id = t.kategori_id " +
+        "WHERE t.tipe = 'PENGELUARAN' " +
+        "  AND t.umkm_id = 1 " +
+        "  AND MONTH(t.tanggal) = MONTH(CURDATE()) " +
+        "  AND YEAR(t.tanggal)  = YEAR(CURDATE()) " +
+        "GROUP BY k.nama_kategori " +
+        "ORDER BY total DESC " +
+        "LIMIT 5";
+    try (java.sql.PreparedStatement ps =
+            myfinance.DBConnection.getConnection().prepareStatement(sql)) {
+        java.sql.ResultSet rs = ps.executeQuery();
+        java.util.List<String> names  = new java.util.ArrayList<>();
+        java.util.List<Double> values = new java.util.ArrayList<>();
+        while (rs.next()) {
+            names.add(rs.getString("nama_kategori"));
+            values.add(rs.getDouble("total"));
+        }
+        if (!names.isEmpty()) {
+            setCategoryNames(names.toArray(new String[0]));
+            setCategoryValues(values.stream().mapToDouble(Double::doubleValue).toArray());
+            Color[] colors = {
+                new Color(255, 107, 107), new Color(72, 209, 180),
+                new Color(74, 162, 220),  new Color(255, 178, 120),
+                new Color(152, 224, 196)
+            };
+            Color[] used = new Color[names.size()];
+            for (int i = 0; i < names.size(); i++) used[i] = colors[i % colors.length];
+            setCategoryColors(used);
+        }
+    } catch (java.sql.SQLException e) {
+        e.printStackTrace();
+    }
+}
 
     // ── Data ──────────────────────────────────────────────────────────────────
     private String[] categoryNames  = {"Makanan & Minuman", "Transport", "Belanja", "Tagihan", "Hiburan"};
@@ -199,4 +237,5 @@ public class DonutChartPanel extends JPanel {
     public void setAmountColor(Color amountColor) {
         this.amountColor = amountColor; repaint();
     }
+
 }

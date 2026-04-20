@@ -16,6 +16,41 @@ import java.util.List;
  * dengan area fill dan gradient di bawahnya. Bisa dipakai di NetBeans Palette.
  */
 public class TrendChartPanel extends JPanel {
+    
+    public void loadFromDB() {
+    String sql = """
+        SELECT MONTH(tanggal) AS bln, YEAR(tanggal) AS thn,
+               SUM(CASE WHEN tipe='pemasukan'   THEN jumlah ELSE 0 END) AS income,
+               SUM(CASE WHEN tipe='pengeluaran' THEN jumlah ELSE 0 END) AS expense
+        FROM transaksi
+        WHERE tanggal >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH)
+        GROUP BY thn, bln
+        ORDER BY thn, bln
+        LIMIT 6
+        """;
+    try (java.sql.PreparedStatement ps =
+            myfinance.DBConnection.getConnection().prepareStatement(sql)) {
+        // hapus ps.setLong(1, ...) karena tidak ada ? lagi
+        java.sql.ResultSet rs = ps.executeQuery();
+        java.util.List<Double> inc = new java.util.ArrayList<>();
+        java.util.List<Double> exp = new java.util.ArrayList<>();
+        java.util.List<String> lbl = new java.util.ArrayList<>();
+        String[] bulanNama = {"","Jan","Feb","Mar","Apr","Mei","Jun",
+                              "Jul","Agt","Sep","Okt","Nov","Des"};
+        while (rs.next()) {
+            inc.add(rs.getDouble("income"));
+            exp.add(rs.getDouble("expense"));
+            lbl.add(bulanNama[rs.getInt("bln")]);
+        }
+        if (inc.size() >= 2) {
+            setIncomeData(inc.stream().mapToDouble(Double::doubleValue).toArray());
+            setExpenseData(exp.stream().mapToDouble(Double::doubleValue).toArray());
+            setLabels(lbl.toArray(new String[0]));
+        }
+    } catch (java.sql.SQLException e) {
+        e.printStackTrace();
+    }
+}
 
     // ── Data ──────────────────────────────────────────────────────────────────
     private double[] incomeData    = {8_500_000, 9_200_000, 9_000_000, 9_600_000, 10_500_000, 11_500_000};

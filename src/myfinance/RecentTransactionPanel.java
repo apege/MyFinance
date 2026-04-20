@@ -16,6 +16,33 @@ import java.util.Locale;
  * Bisa ditambahkan ke NetBeans Palette.
  */
 public class RecentTransactionPanel extends JPanel {
+    
+    public void loadFromDB() {
+        try {
+            java.util.List<Transaksi> rows = TransaksiDAO.getRecent(1L, maxVisible);
+            if (rows.isEmpty()) return;  // biarkan data default tampil
+
+            Transaction[] txs = new Transaction[rows.size()];
+            for (int i = 0; i < rows.size(); i++) {
+                Transaksi t = rows.get(i);
+                double amt  = t.isPemasukan() ? t.getJumlah() : -t.getJumlah();
+                txs[i] = new Transaction(
+                    t.getDeskripsi(),
+                    t.getTanggalShort(),
+                    t.getKategori(),
+                    amt
+                );
+            }
+            setTransactions(txs);
+        } catch (Exception e) {
+            e.printStackTrace();
+            // Tampilkan pesan error ke user
+            JOptionPane.showMessageDialog(this, 
+                "Gagal memuat transaksi: " + e.getMessage(),
+                "Error", 
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
 
     // ── Model data transaksi ──────────────────────────────────────────────────
     public static class Transaction {
