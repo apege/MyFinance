@@ -5,6 +5,14 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
 
+/**
+ * LaporanKeuangan - Panel desain UI only, no database
+ * Cocok dipakai sebagai panel dalam MainFrame / MyFinance.java
+ * 
+ * Cara pakai di MyFinance.java:
+ *   LaporanKeuangan lk = new LaporanKeuangan();
+ *   // tambahkan ke panel/tabbed pane lo
+ */
 public class LaporanKeuangan extends JPanel {
 
     // ── Warna ──────────────────────────────────────────────────────
@@ -159,6 +167,10 @@ public class LaporanKeuangan extends JPanel {
         body.add(buildChartCard(
             "📈  Progress Tabungan vs Target",
             new BarPanel(), 300));
+        body.add(Box.createVerticalStrut(20));
+
+        // ── Tabel transaksi ────────────────────────────────────────
+        body.add(buildTableCard());
 
         return body;
     }
@@ -234,6 +246,135 @@ public class LaporanKeuangan extends JPanel {
         card.add(lbl, BorderLayout.NORTH);
         card.add(chart, BorderLayout.CENTER);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, chartH + 80));
+        return card;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // DATA TABEL
+    // ══════════════════════════════════════════════════════════════
+    static final Object[][] TABLE_DATA = {
+        {"Jul 2024","Gaji","Gaji bulanan","Pemasukan",8_500_000L,8_500_000L},
+        {"Jul 2024","Makan","Kebutuhan harian","Pengeluaran",2_200_000L,6_300_000L},
+        {"Jul 2024","Tabungan","Transfer tabungan","Tabungan",2_500_000L,3_800_000L},
+        {"Agu 2024","Gaji","Gaji bulanan","Pemasukan",9_200_000L,13_000_000L},
+        {"Agu 2024","Transportasi","Bensin & parkir","Pengeluaran",1_500_000L,11_500_000L},
+        {"Agu 2024","Belanja","Kebutuhan rumah","Pengeluaran",2_900_000L,8_600_000L},
+        {"Agu 2024","Tabungan","Transfer tabungan","Tabungan",2_400_000L,6_200_000L},
+        {"Sep 2024","Gaji","Gaji bulanan","Pemasukan",8_800_000L,15_000_000L},
+        {"Sep 2024","Kesehatan","Klinik & obat","Pengeluaran",1_800_000L,13_200_000L},
+        {"Sep 2024","Makan","Restoran & cafe","Pengeluaran",2_600_000L,10_600_000L},
+        {"Sep 2024","Tabungan","Transfer tabungan","Tabungan",1_700_000L,8_900_000L},
+        {"Okt 2024","Gaji","Gaji bulanan","Pemasukan",9_500_000L,18_400_000L},
+        {"Okt 2024","Belanja","Pakaian & elektronik","Pengeluaran",3_100_000L,15_300_000L},
+        {"Okt 2024","Tabungan","Transfer tabungan","Tabungan",3_200_000L,12_100_000L},
+        {"Nov 2024","Gaji","Gaji bulanan","Pemasukan",10_200_000L,22_300_000L},
+        {"Nov 2024","Hiburan","Bioskop & streaming","Pengeluaran",900_000L,21_400_000L},
+        {"Nov 2024","Tabungan","Transfer tabungan","Tabungan",3_300_000L,18_100_000L},
+        {"Des 2024","Gaji","Gaji + bonus","Pemasukan",11_000_000L,29_100_000L},
+        {"Des 2024","Liburan","Perjalanan keluarga","Pengeluaran",4_200_000L,24_900_000L},
+        {"Des 2024","Tabungan","Transfer tabungan","Tabungan",3_400_000L,21_500_000L},
+    };
+
+    private JPanel buildTableCard() {
+        JPanel card = new JPanel(new BorderLayout(0, 12));
+        card.setBackground(CARD_BG);
+        card.setBorder(BorderFactory.createCompoundBorder(
+            new RoundedBorder(BORDER, 12),
+            BorderFactory.createEmptyBorder(16,16,16,16)));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 520));
+
+        // Header
+        JPanel top = new JPanel(new BorderLayout());
+        top.setOpaque(false);
+        JLabel title = new JLabel("Rincian Transaksi Bulanan");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        title.setForeground(TXT_DARK);
+        title.setBorder(BorderFactory.createEmptyBorder(0,0,12,0));
+
+        JTextField search = new JTextField();
+        search.setPreferredSize(new Dimension(180, 30));
+        search.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        search.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(BORDER, 1, true),
+            BorderFactory.createEmptyBorder(4,10,4,10)));
+        top.add(title, BorderLayout.WEST);
+        top.add(search, BorderLayout.EAST);
+
+        // Model
+        String[] cols = {"Bulan","Kategori","Keterangan","Tipe","Jumlah","Saldo"};
+        javax.swing.table.DefaultTableModel model = new javax.swing.table.DefaultTableModel(cols, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+        for (Object[] row : TABLE_DATA) {
+            String tipe = (String) row[3];
+            String prefix = tipe.equals("Pemasukan") ? "+ " : tipe.equals("Pengeluaran") ? "- " : "-> ";
+            model.addRow(new Object[]{
+                row[0], row[1], row[2], row[3],
+                prefix + "Rp " + String.format("%,.0f", (Long)row[4]),
+                "Rp " + String.format("%,.0f", (Long)row[5])
+            });
+        }
+
+        // Table
+        JTable table = new JTable(model) {
+            @Override public Component prepareRenderer(javax.swing.table.TableCellRenderer r, int row, int col) {
+                Component c = super.prepareRenderer(r, row, col);
+                String tipe = (String) getValueAt(row, 3);
+                if (col == 4) {
+                    if (tipe.equals("Pemasukan")) c.setForeground(GREEN);
+                    else if (tipe.equals("Pengeluaran")) c.setForeground(RED);
+                    else c.setForeground(BLUE);
+                } else if (col == 3) {
+                    if (tipe.equals("Pemasukan")) c.setForeground(new Color(0x15,0x80,0x3D));
+                    else if (tipe.equals("Pengeluaran")) c.setForeground(new Color(0xB9,0x1C,0x1C));
+                    else c.setForeground(new Color(0x1D,0x4E,0xD8));
+                } else {
+                    c.setForeground(TXT_DARK);
+                }
+                c.setBackground(isRowSelected(row) ? new Color(0xEE,0xED,0xFE) :
+                                row % 2 == 0 ? Color.WHITE : new Color(0xF9,0xFA,0xFB));
+                return c;
+            }
+        };
+        table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        table.setRowHeight(38);
+        table.setShowGrid(false);
+        table.setIntercellSpacing(new Dimension(0,0));
+        table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
+        table.getTableHeader().setBackground(new Color(0xF3,0xF4,0xF6));
+        table.getTableHeader().setForeground(TXT_GRAY);
+        table.getTableHeader().setBorder(BorderFactory.createMatteBorder(0,0,2,0,BORDER));
+        table.setSelectionBackground(new Color(0xEE,0xED,0xFE));
+
+        int[] widths = {90,100,160,110,140,140};
+        for (int i=0; i<widths.length; i++)
+            table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
+
+        javax.swing.table.DefaultTableCellRenderer rightR = new javax.swing.table.DefaultTableCellRenderer();
+        rightR.setHorizontalAlignment(SwingConstants.RIGHT);
+        table.getColumnModel().getColumn(4).setCellRenderer(rightR);
+        table.getColumnModel().getColumn(5).setCellRenderer(rightR);
+
+        // Search filter
+        javax.swing.table.TableRowSorter<javax.swing.table.DefaultTableModel> sorter =
+            new javax.swing.table.TableRowSorter<>(model);
+        table.setRowSorter(sorter);
+        search.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            void upd() {
+                String txt = search.getText().trim();
+                sorter.setRowFilter(txt.isEmpty() ? null : javax.swing.RowFilter.regexFilter("(?i)"+txt));
+            }
+            public void insertUpdate(javax.swing.event.DocumentEvent e){upd();}
+            public void removeUpdate(javax.swing.event.DocumentEvent e){upd();}
+            public void changedUpdate(javax.swing.event.DocumentEvent e){upd();}
+        });
+
+        JScrollPane sp = new JScrollPane(table);
+        sp.setBorder(BorderFactory.createLineBorder(BORDER, 1));
+        sp.setPreferredSize(new Dimension(800, 380));
+
+        card.add(top, BorderLayout.NORTH);
+        card.add(sp, BorderLayout.CENTER);
         return card;
     }
 
